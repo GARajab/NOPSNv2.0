@@ -7,7 +7,8 @@ import Register from './components/Auth/Register';
 import ForgotPassword from './components/Auth/ForgotPassword';
 import Dashboard from './components/Dashboard/Dashboard';
 import AdminDashboard from './components/Admin/AdminDashboard';
-
+import AuthCallback from './components/Auth/AuthCallback';
+import ResetPassword from './components/Auth/ResetPassword';
 // In your Routes component:
 
 
@@ -74,12 +75,19 @@ const AppContent: React.FC = () => {
       } />
       <Route path="/" element={<Navigate to="/login" />} />
       <Route path="*" element={<Navigate to="/login" />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/admin" element={
         <ProtectedRoute>
           <AdminDashboard />
         </ProtectedRoute>
       } />
+      <Route path="/reset-password" element={
+        <PublicRoute>
+          <ResetPassword />
+        </PublicRoute>
+      } />
     </Routes>
+    
   );
 };
 
