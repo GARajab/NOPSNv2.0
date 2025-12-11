@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Shield, Activity, Settings } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../Common/Button';
+import { Link } from 'react-router-dom';
 
 const Dashboard: React.FC = () => {
   const { user, signOut } = useAuth();
@@ -46,6 +47,12 @@ const Dashboard: React.FC = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
+          <Link to="/admin">
+            <Button variant="secondary" className="flex items-center">
+              <Shield className="h-4 w-4 mr-2" />
+              Admin Dashboard
+            </Button>
+          </Link>
           {/* Welcome Card */}
           <div className="bg-white overflow-hidden shadow rounded-lg mb-6">
             <div className="px-4 py-5 sm:p-6">
