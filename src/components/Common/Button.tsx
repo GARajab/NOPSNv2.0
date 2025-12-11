@@ -6,6 +6,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   children: React.ReactNode;
   fullWidth?: boolean;
+  size?: 'sm' | 'md' | 'lg'; // Add this line
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -13,6 +14,7 @@ const Button: React.FC<ButtonProps> = ({
   loading = false,
   children,
   fullWidth = false,
+  size = 'md', // Add default value
   className = '',
   disabled,
   ...props
@@ -25,12 +27,19 @@ const Button: React.FC<ButtonProps> = ({
     danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 disabled:bg-red-400'
   };
 
+  // Add size classes
+  const sizeClasses = {
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2 text-base',
+    lg: 'px-6 py-3 text-lg'
+  };
+
   const widthClass = fullWidth ? 'w-full' : '';
   const disabledClass = disabled || loading ? 'opacity-50 cursor-not-allowed' : '';
 
   return (
     <button
-      className={`${baseClasses} ${variantClasses[variant]} ${widthClass} ${disabledClass} ${className} px-4 py-2`}
+      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${widthClass} ${disabledClass} ${className}`}
       disabled={disabled || loading}
       {...props}
     >
