@@ -9,7 +9,7 @@ import Dashboard from './components/Dashboard/Dashboard';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import AuthCallback from './components/Auth/AuthCallback';
 import ResetPassword from './components/Auth/ResetPassword';
-import UpdatePassword from './components/Auth/UpdatePassword';
+
 // In your Routes component:
 
 
@@ -85,11 +85,6 @@ const AppContent: React.FC = () => {
       <Route path="/reset-password" element={
         <PublicRoute>
           <ResetPassword />
-        </PublicRoute>
-      } />
-      <Route path="/update-password" element={
-        <PublicRoute>
-          <UpdatePassword />
         </PublicRoute>
       } />
     </Routes>

@@ -6,6 +6,7 @@ import AuthLayout from './AuthLayout';
 import Button from '../Common/Button';
 import Input from '../Common/Input';
 import Spinner from '../Common/Spinner';
+import { Link } from 'react-router-dom';
 
 const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
