@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import AuthLayout from './AuthLayout';
@@ -8,13 +8,14 @@ import Input from '../Common/Input';
 import Spinner from '../Common/Spinner';
 
 const UpdatePassword: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [hasValidSession, setHasValidSession] = useState(false);
+  const [isRecoverySession, setIsRecoverySession] = useState(false);
 
   const navigate = useNavigate();
 
@@ -23,7 +24,14 @@ const UpdatePassword: React.FC = () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        setHasValidSession(true);
+        // Check if this is a recovery session by looking at the URL parameters
+        const type = searchParams.get('type');
+        if (type === 'recovery') {
+          setIsRecoverySession(true);
+        } else {
+          // If not a recovery session, redirect to dashboard
+          navigate('/dashboard');
+        }
       } else {
         setError('Invalid or expired reset link. Please request a new password reset.');
       }
@@ -32,7 +40,7 @@ const UpdatePassword: React.FC = () => {
     };
 
     checkSession();
-  }, []);
+  }, [navigate, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,12 +74,16 @@ const UpdatePassword: React.FC = () => {
       } else {
         setSuccess(true);
         
-        // Wait a moment, then sign out and redirect
-        setTimeout(async () => {
-          await supabase.auth.signOut();
-          localStorage.clear();
-          sessionStorage.clear();
-          navigate('/login?message=password_updated');
+        // IMPORTANT: Force sign out immediately after password change
+        await supabase.auth.signOut();
+        
+        // Clear all storage
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // Redirect to login with success message
+        setTimeout(() => {
+          navigate('/login?message=password_reset_success');
         }, 2000);
       }
     } catch (err: any) {
@@ -89,29 +101,22 @@ const UpdatePassword: React.FC = () => {
     );
   }
 
-  if (!hasValidSession && !success) {
+  if (!isRecoverySession && !success) {
     return (
       <AuthLayout
-        title="Invalid Link"
-        subtitle="The password reset link is invalid or has expired"
+        title="Invalid Access"
+        subtitle="This page is only for password recovery"
       >
         <div className="text-center space-y-4">
           <div className="flex justify-center">
-            <div className="bg-red-100 p-3 rounded-full">
-              <AlertCircle className="h-8 w-8 text-red-600" />
+            <div className="bg-blue-100 p-3 rounded-full">
+              <AlertCircle className="h-8 w-8 text-blue-600" />
             </div>
           </div>
           <p className="text-gray-600">
-            {error || 'Please request a new password reset link.'}
+            Redirecting you to your dashboard...
           </p>
-          <div className="pt-4">
-            <button
-              onClick={() => navigate('/forgot-password')}
-              className="text-sm font-medium text-primary-600 hover:text-primary-500"
-            >
-              Request New Reset Link
-            </button>
-          </div>
+          <Spinner size="md" />
         </div>
       </AuthLayout>
     );
@@ -133,7 +138,7 @@ const UpdatePassword: React.FC = () => {
             Password Updated!
           </h3>
           <p className="text-gray-600">
-            Your password has been successfully updated. Redirecting to login...
+            Your password has been successfully updated. You will be logged out and redirected to login...
           </p>
         </div>
       ) : (
@@ -146,6 +151,13 @@ const UpdatePassword: React.FC = () => {
               </div>
             </div>
           )}
+
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p className="text-sm text-yellow-800">
+              <strong>Important:</strong> You are currently logged in with a temporary recovery session. 
+              After setting your new password, you will be automatically logged out and must sign in again.
+            </p>
+          </div>
 
           <Input
             label="New Password"
@@ -187,19 +199,8 @@ const UpdatePassword: React.FC = () => {
             loading={loading}
             fullWidth
           >
-            Update Password
+            Update Password & Log Out
           </Button>
-
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => navigate('/login')}
-              className="text-sm font-medium text-primary-600 hover:text-primary-500"
-              disabled={loading}
-            >
-              Back to login
-            </button>
-          </div>
         </form>
       )}
     </AuthLayout>
