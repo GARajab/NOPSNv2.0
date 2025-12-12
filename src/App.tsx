@@ -10,6 +10,7 @@ import AdminDashboard from './components/Admin/AdminDashboard';
 import AuthCallback from './components/Auth/AuthCallback';
 import ResetPassword from './components/Auth/ResetPassword';
 import UpdatePassword from './components/Auth/UpdatePassword';
+import RecoveryHandler from './components/Auth/RecoveryHandler';
 
 // In your Routes component:
 
@@ -93,6 +94,7 @@ const AppContent: React.FC = () => {
           <UpdatePassword />
         </PublicRoute>
       } />
+      <Route path="/recovery-handler" element={<RecoveryHandler />} />
     </Routes>
 
   );
