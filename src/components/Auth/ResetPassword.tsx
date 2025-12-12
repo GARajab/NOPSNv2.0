@@ -1,20 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, AlertCircle, CheckCircle } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import AuthLayout from './AuthLayout';
 import Button from '../Common/Button';
 import Input from '../Common/Input';
+import Spinner from '../Common/Spinner';
 
-const ResetPassword: React.FC = () => {
+const UpdatePassword: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
-  const { updatePassword } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if user has a valid session (they should come from email link)
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        // No session - they shouldn't be here
+        setError('Invalid or expired link. Please request a new password reset.');
+        setCheckingSession(false);
+      } else {
+        setCheckingSession(false);
+      }
+    };
+
+    checkSession();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,14 +56,19 @@ const ResetPassword: React.FC = () => {
     setLoading(true);
 
     try {
-      const { error: updateError } = await updatePassword(password);
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: password,
+      });
       
       if (updateError) {
         setError(updateError.message);
       } else {
         setSuccess(true);
-        setTimeout(() => {
-          navigate('/dashboard');
+        
+        // Sign out and redirect to login
+        setTimeout(async () => {
+          await supabase.auth.signOut();
+          navigate('/login');
         }, 3000);
       }
     } catch (err) {
@@ -54,6 +77,14 @@ const ResetPassword: React.FC = () => {
       setLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
 
   return (
     <AuthLayout
@@ -71,7 +102,7 @@ const ResetPassword: React.FC = () => {
             Password Updated!
           </h3>
           <p className="text-gray-600">
-            Your password has been successfully updated. Redirecting to dashboard...
+            Your password has been successfully updated. Redirecting to login...
           </p>
         </div>
       ) : (
@@ -127,10 +158,20 @@ const ResetPassword: React.FC = () => {
           >
             Update Password
           </Button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="text-sm font-medium text-primary-600 hover:text-primary-500"
+            >
+              Back to login
+            </button>
+          </div>
         </form>
       )}
     </AuthLayout>
   );
 };
 
-export default ResetPassword;
+export default UpdatePassword;

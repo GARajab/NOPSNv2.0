@@ -11,6 +11,7 @@ const Register: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -34,22 +35,24 @@ const Register: React.FC = () => {
     setErrors({});
 
     try {
-      const { error } = await signUp(email, password);
+      const { error } = await signUp(email, password, {
+        full_name: fullName
+      });
       
       if (error) {
         if (error.message.includes('already registered')) {
           setAuthError('An account with this email already exists.');
+        } else if (error.message.includes('rate limit')) {
+          setAuthError('Too many attempts. Please try again later.');
         } else {
           setAuthError(error.message);
         }
       } else {
         setSuccess(true);
-        setTimeout(() => {
-          navigate('/login');
-        }, 3000);
+        // Don't auto-redirect - let user confirm email first
       }
-    } catch (error) {
-      setAuthError('An unexpected error occurred. Please try again.');
+    } catch (error: any) {
+      setAuthError(error.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -68,11 +71,22 @@ const Register: React.FC = () => {
             </div>
           </div>
           <h3 className="text-xl font-semibold text-gray-900">
-            Registration Successful!
+            Check your email!
           </h3>
           <p className="text-gray-600">
-            Please check your email to confirm your account. You will be redirected to login shortly.
+            We've sent a confirmation link to <strong>{email}</strong>.
           </p>
+          <p className="text-sm text-gray-500">
+            Please check your inbox and click the link to verify your account.
+          </p>
+          <div className="pt-4">
+            <Button
+              variant="primary"
+              onClick={() => navigate('/login')}
+            >
+              Go to Login
+            </Button>
+          </div>
         </div>
       ) : (
         <form className="space-y-6" onSubmit={handleSubmit}>
@@ -84,6 +98,15 @@ const Register: React.FC = () => {
               </div>
             </div>
           )}
+
+          <Input
+            label="Full Name (Optional)"
+            type="text"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="John Doe"
+            disabled={loading}
+          />
 
           <Input
             label="Email address"
@@ -124,17 +147,17 @@ const Register: React.FC = () => {
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <p className="text-sm font-medium text-gray-700">Password requirements:</p>
             <ul className="text-sm text-gray-600 space-y-1">
-              <li className="flex items-center">
-                <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                At least 6 characters
+              <li className={password.length >= 6 ? 'text-green-600' : ''}>
+                • At least 6 characters
               </li>
-              <li className="flex items-center">
-                <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                One uppercase & lowercase letter
+              <li className={/(?=.*[a-z])/.test(password) ? 'text-green-600' : ''}>
+                • One lowercase letter
               </li>
-              <li className="flex items-center">
-                <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                At least one number
+              <li className={/(?=.*[A-Z])/.test(password) ? 'text-green-600' : ''}>
+                • One uppercase letter
+              </li>
+              <li className={/(?=.*\d)/.test(password) ? 'text-green-600' : ''}>
+                • One number
               </li>
             </ul>
           </div>
@@ -146,6 +169,7 @@ const Register: React.FC = () => {
               type="checkbox"
               className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
               required
+              disabled={loading}
             />
             <label htmlFor="terms" className="ml-2 block text-sm text-gray-700">
               I agree to the{' '}
