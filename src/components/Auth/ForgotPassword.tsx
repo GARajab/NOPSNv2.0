@@ -25,14 +25,13 @@ const ForgotPassword: React.FC = () => {
     setLoading(true);
 
     try {
-      // Use signInWithOtp with type: 'recovery' - this doesn't auto-login
-      const { error: resetError } = await supabase.auth.signInWithOtp({
+      // Use resetPasswordForEmail (standard Supabase method)
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
         email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/reset-password`,
-          shouldCreateUser: false,
-        },
-      });
+        {
+          redirectTo: `${window.location.origin}/update-password`,
+        }
+      );
       
       if (resetError) {
         setError(resetError.message);
