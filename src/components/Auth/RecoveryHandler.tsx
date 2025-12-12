@@ -8,37 +8,59 @@ const RecoveryHandler: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const handleRecovery = async () => {
-      const type = searchParams.get('type');
-      const access_token = searchParams.get('access_token');
-      
-      if (type === 'recovery' && access_token) {
-        // Set the session from the token
-        const { data, error } = await supabase.auth.setSession({
-          access_token,
-          refresh_token: '',
-        });
+    const handleRecoveryLink = async () => {
+      try {
+        // Get the token from URL
+        const token = searchParams.get('token');
+        const type = searchParams.get('type');
         
-        if (!error && data.session) {
-          // Redirect to password update page
+        console.log('Recovery handler params:', { token, type });
+        
+        if (type !== 'recovery' || !token) {
+          console.error('Invalid recovery link - missing token or wrong type');
+          navigate('/forgot-password?error=invalid_link');
+          return;
+        }
+
+        // IMPORTANT: Verify the token and get a session
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: 'recovery',
+        });
+
+        console.log('Verify OTP response:', { data, error });
+
+        if (error) {
+          console.error('Token verification failed:', error);
+          navigate('/forgot-password?error=invalid_token');
+          return;
+        }
+
+        if (data?.session) {
+          // Success! Redirect to password update page
           navigate('/update-password?recovery=true');
         } else {
-          navigate('/forgot-password?error=invalid_token');
+          console.error('No session created from recovery token');
+          navigate('/forgot-password?error=no_session');
         }
-      } else {
-        navigate('/login');
+      } catch (err) {
+        console.error('Error in recovery handler:', err);
+        navigate('/forgot-password?error=unexpected');
       }
     };
 
-    handleRecovery();
+    handleRecoveryLink();
   }, [navigate, searchParams]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Spinner size="lg" />
-      <p className="ml-3">Processing recovery link...</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <Spinner size="lg" className="mx-auto mb-4" />
+        <p className="text-gray-600">Processing password recovery link...</p>
+      </div>
     </div>
   );
+console.log('Full URL search params:', Object.fromEntries(searchParams.entries()));
 };
 
 export default RecoveryHandler;

@@ -15,47 +15,49 @@ const UpdatePassword: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [isRecoverySession, setIsRecoverySession] = useState(false);
+  const [isRecoveryFlow, setIsRecoveryFlow] = useState(false);
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkSession = async () => {
+    const checkSessionAndRecovery = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       
-      if (session) {
-        // Check if this is a recovery session by looking at the URL parameters
-        const type = searchParams.get('type');
-        if (type === 'recovery') {
-          setIsRecoverySession(true);
-        } else {
-          // If not a recovery session, redirect to dashboard
-          navigate('/dashboard');
-        }
+      if (!session) {
+        setError('No active session. Please use a valid recovery link.');
+        setCheckingSession(false);
+        return;
+      }
+
+      // Check if this is a recovery flow
+      const recoveryFlag = searchParams.get('recovery');
+      if (recoveryFlag === 'true') {
+        setIsRecoveryFlow(true);
       } else {
-        setError('Invalid or expired reset link. Please request a new password reset.');
+        // If not recovery, maybe user accessed directly - check if we should redirect
+        navigate('/dashboard');
+        return;
       }
       
       setCheckingSession(false);
     };
 
-    checkSession();
+    checkSessionAndRecovery();
   }, [navigate, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
+    // Validation
     if (!newPassword.trim()) {
       setError('Password is required');
       return;
     }
-
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
     if (newPassword.length < 6) {
       setError('Password must be at least 6 characters');
       return;
@@ -64,7 +66,7 @@ const UpdatePassword: React.FC = () => {
     setLoading(true);
 
     try {
-      // Update the password
+      // Update password
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -74,14 +76,14 @@ const UpdatePassword: React.FC = () => {
       } else {
         setSuccess(true);
         
-        // IMPORTANT: Force sign out immediately after password change
+        // IMPORTANT FOR RECOVERY: Sign out immediately
         await supabase.auth.signOut();
         
         // Clear all storage
         localStorage.clear();
         sessionStorage.clear();
         
-        // Redirect to login with success message
+        // Redirect to login
         setTimeout(() => {
           navigate('/login?message=password_reset_success');
         }, 2000);
@@ -101,22 +103,23 @@ const UpdatePassword: React.FC = () => {
     );
   }
 
-  if (!isRecoverySession && !success) {
+  if (error && !isRecoveryFlow) {
     return (
       <AuthLayout
-        title="Invalid Access"
-        subtitle="This page is only for password recovery"
+        title="Session Error"
+        subtitle="Unable to process password reset"
       >
         <div className="text-center space-y-4">
           <div className="flex justify-center">
-            <div className="bg-blue-100 p-3 rounded-full">
-              <AlertCircle className="h-8 w-8 text-blue-600" />
-            </div>
+            <AlertCircle className="h-12 w-12 text-red-500" />
           </div>
-          <p className="text-gray-600">
-            Redirecting you to your dashboard...
-          </p>
-          <Spinner size="md" />
+          <p className="text-gray-600">{error}</p>
+          <Button
+            variant="primary"
+            onClick={() => navigate('/forgot-password')}
+          >
+            Request New Reset Link
+          </Button>
         </div>
       </AuthLayout>
     );
@@ -124,22 +127,21 @@ const UpdatePassword: React.FC = () => {
 
   return (
     <AuthLayout
-      title="Set new password"
+      title="Set New Password"
       subtitle="Create a new password for your account"
     >
       {success ? (
         <div className="text-center space-y-4 animate-fade-in">
           <div className="flex justify-center">
-            <div className="bg-green-100 p-3 rounded-full">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-            </div>
+            <CheckCircle className="h-12 w-12 text-green-500" />
           </div>
           <h3 className="text-xl font-semibold text-gray-900">
-            Password Updated!
+            Password Updated Successfully!
           </h3>
           <p className="text-gray-600">
-            Your password has been successfully updated. You will be logged out and redirected to login...
+            You will be redirected to login in a moment...
           </p>
+          <Spinner size="md" />
         </div>
       ) : (
         <form className="space-y-6" onSubmit={handleSubmit}>
@@ -152,12 +154,14 @@ const UpdatePassword: React.FC = () => {
             </div>
           )}
 
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-sm text-yellow-800">
-              <strong>Important:</strong> You are currently logged in with a temporary recovery session. 
-              After setting your new password, you will be automatically logged out and must sign in again.
-            </p>
-          </div>
+          {isRecoveryFlow && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-blue-800">
+                <strong>Password Reset:</strong> Please enter your new password below.
+                After updating, you will be logged out and redirected to the login page.
+              </p>
+            </div>
+          )}
 
           <Input
             label="New Password"
@@ -165,7 +169,7 @@ const UpdatePassword: React.FC = () => {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             icon={Lock}
-            placeholder="••••••••"
+            placeholder="Enter new password"
             required
             disabled={loading}
           />
@@ -176,18 +180,20 @@ const UpdatePassword: React.FC = () => {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             icon={Lock}
-            placeholder="••••••••"
+            placeholder="Confirm new password"
             required
             disabled={loading}
           />
 
           <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Password requirements:</p>
+            <p className="text-sm font-medium text-gray-700 mb-2">
+              Password Requirements:
+            </p>
             <ul className="text-sm text-gray-600 space-y-1">
-              <li className={newPassword.length >= 6 ? 'text-green-600' : ''}>
-                • At least 6 characters
+              <li className={newPassword.length >= 6 ? 'text-green-600 font-medium' : ''}>
+                • At least 6 characters long
               </li>
-              <li className={newPassword && newPassword === confirmPassword ? 'text-green-600' : ''}>
+              <li className={newPassword && newPassword === confirmPassword ? 'text-green-600 font-medium' : ''}>
                 • Passwords must match
               </li>
             </ul>
@@ -198,9 +204,21 @@ const UpdatePassword: React.FC = () => {
             variant="primary"
             loading={loading}
             fullWidth
+            className="mt-4"
           >
-            Update Password & Log Out
+            Update Password
           </Button>
+
+          <div className="text-center pt-4">
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="text-sm font-medium text-primary-600 hover:text-primary-500"
+              disabled={loading}
+            >
+              Back to Login
+            </button>
+          </div>
         </form>
       )}
     </AuthLayout>
