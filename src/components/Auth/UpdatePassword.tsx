@@ -20,21 +20,29 @@ const UpdatePassword: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkSessionAndRecovery = async () => {
+    const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        setError('No active session. Please use a valid recovery link.');
+        setError('No active session. Please use the password reset link from your email.');
         setCheckingSession(false);
         return;
       }
 
-      // Check if this is a recovery flow
-      const recoveryFlag = searchParams.get('recovery');
-      if (recoveryFlag === 'true') {
+      // Check URL for recovery indicators
+      const hash = window.location.hash;
+      const hasRecoveryHash = hash.includes('type=recovery') || hash.includes('access_token');
+      
+      // Also check if user just came from a password reset
+      // You can check localStorage or a timestamp
+      const lastResetRequest = localStorage.getItem('last_password_reset_request');
+      const now = Date.now();
+      
+      if (hasRecoveryHash || (lastResetRequest && (now - parseInt(lastResetRequest)) < 300000)) {
+        // 5-minute window after reset request
         setIsRecoveryFlow(true);
       } else {
-        // If not recovery, maybe user accessed directly - check if we should redirect
+        // Not a recovery flow, redirect to dashboard
         navigate('/dashboard');
         return;
       }
@@ -42,8 +50,8 @@ const UpdatePassword: React.FC = () => {
       setCheckingSession(false);
     };
 
-    checkSessionAndRecovery();
-  }, [navigate, searchParams]);
+    checkSession();
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
