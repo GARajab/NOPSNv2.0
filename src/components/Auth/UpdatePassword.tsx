@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Lock, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import AuthLayout from './AuthLayout';
@@ -8,7 +8,6 @@ import Input from '../Common/Input';
 import Spinner from '../Common/Spinner';
 
 const UpdatePassword: React.FC = () => {
-  const [searchParams] = useSearchParams();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,44 +15,94 @@ const UpdatePassword: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [isRecoveryFlow, setIsRecoveryFlow] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        setError('No active session. Please use the password reset link from your email.');
-        setCheckingSession(false);
-        return;
-      }
+    const checkSessionAndRecovery = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        console.log('Session in UpdatePassword:', session);
+        
+        if (!session) {
+          setError('No active session. Please use the password reset link from your email.');
+          setCheckingSession(false);
+          return;
+        }
 
-      // Check URL for recovery indicators
-      const hash = window.location.hash;
-      const hasRecoveryHash = hash.includes('type=recovery') || hash.includes('access_token');
-      
-      // Also check if user just came from a password reset
-      // You can check localStorage or a timestamp
-      const lastResetRequest = localStorage.getItem('last_password_reset_request');
-      const now = Date.now();
-      
-      if (hasRecoveryHash || (lastResetRequest && (now - parseInt(lastResetRequest)) < 300000)) {
-        // 5-minute window after reset request
-        setIsRecoveryFlow(true);
-      } else {
+        setUserId(session.user.id);
+
+        // Check if this is a recovery session by looking at the URL when page loads
+        // The hash is available on initial load
+        const hash = window.location.hash;
+        const searchParams = new URLSearchParams(window.location.search);
+        
+        console.log('URL hash on load:', hash);
+        console.log('URL search params:', Object.fromEntries(searchParams.entries()));
+        
+        // Check for recovery indicators
+        const isRecoveryFromHash = hash.includes('type=recovery') || 
+                                   hash.includes('token=') || 
+                                   hash.includes('access_token=');
+        
+        // Check query parameter
+        const isRecoveryParam = searchParams.get('recovery') === 'true';
+        
+        if (isRecoveryFromHash || isRecoveryParam) {
+          console.log('Detected recovery from URL');
+          setIsRecoveryFlow(true);
+          setCheckingSession(false);
+          
+          // Clean up the URL (remove hash/params without reloading)
+          if (isRecoveryFromHash) {
+            window.history.replaceState({}, '', window.location.pathname + window.location.search);
+          }
+          return;
+        }
+
+        // Check localStorage for recovery flag (set when requesting password reset)
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user?.email) {
+          const hasPendingRecovery = localStorage.getItem(`recovery_pending_${user.email}`);
+          const recoveryTimestamp = localStorage.getItem(`recovery_timestamp_${user.email}`);
+          
+          if (hasPendingRecovery && recoveryTimestamp) {
+            const now = Date.now();
+            const timeDiff = now - parseInt(recoveryTimestamp);
+            
+            // Check if recovery was requested within last 10 minutes
+            if (timeDiff < 10 * 60 * 1000) { // 10 minutes
+              console.log('Detected recovery from localStorage flag');
+              setIsRecoveryFlow(true);
+              setCheckingSession(false);
+              return;
+            } else {
+              // Clean up expired flags
+              localStorage.removeItem(`recovery_pending_${user.email}`);
+              localStorage.removeItem(`recovery_timestamp_${user.email}`);
+            }
+          }
+        }
+
         // Not a recovery flow, redirect to dashboard
+        console.log('Not a recovery flow, redirecting to dashboard');
         navigate('/dashboard');
-        return;
+        
+      } catch (err) {
+        console.error('Error checking session:', err);
+        setError('Failed to verify session. Please try again.');
+        setCheckingSession(false);
       }
-      
-      setCheckingSession(false);
     };
 
-    checkSession();
+    // Give it a small delay to ensure URL is processed
+    setTimeout(() => {
+      checkSessionAndRecovery();
+    }, 300);
   }, [navigate]);
-
-  // ... rest of the UpdatePassword component remains the same
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,16 +135,27 @@ const UpdatePassword: React.FC = () => {
       } else {
         setSuccess(true);
         
-        // IMPORTANT FOR RECOVERY: Sign out immediately
-        await supabase.auth.signOut();
+        // Clear recovery flags if they exist
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) {
+          localStorage.removeItem(`recovery_pending_${user.email}`);
+          localStorage.removeItem(`recovery_timestamp_${user.email}`);
+        }
         
-        // Clear all storage
-        localStorage.clear();
-        sessionStorage.clear();
+        // IMPORTANT: Sign out immediately after password change in recovery flow
+        if (isRecoveryFlow) {
+          await supabase.auth.signOut();
+          localStorage.clear();
+          sessionStorage.clear();
+        }
         
-        // Redirect to login
+        // Redirect based on flow
         setTimeout(() => {
-          navigate('/login?message=password_reset_success');
+          if (isRecoveryFlow) {
+            navigate('/login?message=password_reset_success');
+          } else {
+            navigate('/dashboard?message=password_updated');
+          }
         }, 2000);
       }
     } catch (err: any) {
@@ -107,49 +167,43 @@ const UpdatePassword: React.FC = () => {
 
   if (checkingSession) {
     return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Spinner size="lg" className="mx-auto mb-4" />
+          <p className="text-gray-600">Checking session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isRecoveryFlow && !success) {
+    // This shouldn't happen due to redirect, but just in case
+    return (
       <div className="min-h-screen flex items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
   }
 
-  if (error && !isRecoveryFlow) {
-    return (
-      <AuthLayout
-        title="Session Error"
-        subtitle="Unable to process password reset"
-      >
-        <div className="text-center space-y-4">
-          <div className="flex justify-center">
-            <AlertCircle className="h-12 w-12 text-red-500" />
-          </div>
-          <p className="text-gray-600">{error}</p>
-          <Button
-            variant="primary"
-            onClick={() => navigate('/forgot-password')}
-          >
-            Request New Reset Link
-          </Button>
-        </div>
-      </AuthLayout>
-    );
-  }
-
   return (
     <AuthLayout
-      title="Set New Password"
-      subtitle="Create a new password for your account"
+      title={isRecoveryFlow ? "Set New Password" : "Update Password"}
+      subtitle={isRecoveryFlow ? "Create a new password for your account" : "Change your account password"}
     >
       {success ? (
         <div className="text-center space-y-4 animate-fade-in">
           <div className="flex justify-center">
-            <CheckCircle className="h-12 w-12 text-green-500" />
+            <div className="bg-green-100 p-3 rounded-full">
+              <CheckCircle className="h-8 w-8 text-green-600" />
+            </div>
           </div>
           <h3 className="text-xl font-semibold text-gray-900">
-            Password Updated Successfully!
+            {isRecoveryFlow ? 'Password Reset Successful!' : 'Password Updated!'}
           </h3>
           <p className="text-gray-600">
-            You will be redirected to login in a moment...
+            {isRecoveryFlow 
+              ? 'You will be redirected to login...' 
+              : 'Your password has been updated successfully.'}
           </p>
           <Spinner size="md" />
         </div>
@@ -165,10 +219,10 @@ const UpdatePassword: React.FC = () => {
           )}
 
           {isRecoveryFlow && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-blue-800">
-                <strong>Password Reset:</strong> Please enter your new password below.
-                After updating, you will be logged out and redirected to the login page.
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm text-yellow-800">
+                <strong>Password Reset:</strong> You are setting a new password after requesting a reset.
+                After updating, you will be logged out and must sign in again.
               </p>
             </div>
           )}
@@ -216,19 +270,21 @@ const UpdatePassword: React.FC = () => {
             fullWidth
             className="mt-4"
           >
-            Update Password
+            {isRecoveryFlow ? 'Reset Password' : 'Update Password'}
           </Button>
 
-          <div className="text-center pt-4">
-            <button
-              type="button"
-              onClick={() => navigate('/login')}
-              className="text-sm font-medium text-primary-600 hover:text-primary-500"
-              disabled={loading}
-            >
-              Back to Login
-            </button>
-          </div>
+          {!isRecoveryFlow && (
+            <div className="text-center pt-4">
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard')}
+                className="text-sm font-medium text-primary-600 hover:text-primary-500"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </form>
       )}
     </AuthLayout>

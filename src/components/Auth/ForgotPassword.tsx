@@ -25,21 +25,29 @@ const ForgotPassword: React.FC = () => {
     setLoading(true);
 
     try {
-      // Use resetPasswordForEmail (standard Supabase method)
+      // Set recovery flags in localStorage
+      localStorage.setItem(`recovery_pending_${email}`, 'true');
+      localStorage.setItem(`recovery_timestamp_${email}`, Date.now().toString());
+
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(
         email,
         {
           redirectTo: `${window.location.origin}/update-password`,
         }
       );
-      
+
       if (resetError) {
         setError(resetError.message);
+        // Clear the flags if error
+        localStorage.removeItem(`recovery_pending_${email}`);
+        localStorage.removeItem(`recovery_timestamp_${email}`);
       } else {
         setSuccess(true);
       }
     } catch (err: any) {
       setError('An unexpected error occurred. Please try again.');
+      localStorage.removeItem(`recovery_pending_${email}`);
+      localStorage.removeItem(`recovery_timestamp_${email}`);
     } finally {
       setLoading(false);
     }
